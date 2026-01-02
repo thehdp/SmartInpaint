@@ -2,8 +2,8 @@
 <html lang="es">
     <head>
         <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <title>Smart Inpaint - Táctil y Escritorio</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+        <title>Smart Inpaint - Móvil Optimizado</title>
 
         <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png">
         <link rel="icon" type="image/png" sizes="32x32" href="favicon/favicon-32x32.png">
@@ -24,37 +24,43 @@
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                padding: 20px;
+                padding: 10px; /* Menos padding en móvil */
                 margin: 0;
-                /* Evitar rebote en iOS */
-                overscroll-behavior: none;
+                /* Permitir scroll en el body, lo controlamos en el canvas */
+                overscroll-behavior-y: contain; 
             }
             h2 {
-                margin-bottom: 5px;
+                margin: 10px 0 5px 0;
                 color: #fff;
                 text-align: center;
+                font-size: 1.5rem;
             }
-            p {
-                color: #aaa;
-                margin-bottom: 20px;
-                font-size: 0.9em;
+            .instructions {
+                color: #4caf50; /* Verde para que destaque */
+                margin-bottom: 15px;
+                font-size: 1rem;
                 text-align: center;
+                font-weight: bold;
+                border: 1px solid #4caf50;
+                padding: 8px;
+                border-radius: 8px;
+                background-color: rgba(76, 175, 80, 0.1);
             }
 
             /* Barra de herramientas */
             .toolbar {
                 background-color: #1e1e1e;
-                padding: 10px 20px;
+                padding: 10px;
                 border-radius: 10px;
                 display: flex;
                 flex-wrap: wrap;
-                gap: 15px;
-                margin-bottom: 20px;
+                gap: 10px;
+                margin-bottom: 15px;
                 align-items: center;
                 justify-content: center;
                 box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
                 border: 1px solid #333;
-                max-width: 95vw;
+                width: 95%;
                 z-index: 10;
             }
             button,
@@ -63,19 +69,17 @@
                 background-color: #333;
                 color: white;
                 border: 1px solid #555;
-                padding: 10px 14px; /* Botones un poco más grandes para dedos */
+                padding: 10px 12px;
                 border-radius: 6px;
                 cursor: pointer;
                 font-size: 14px;
-                transition: 0.2s;
+                flex-grow: 1; /* Botones ocupan espacio en móvil */
+                text-align: center;
             }
             button.primary {
                 background-color: #007bff;
                 border: none;
                 font-weight: bold;
-            }
-            button.primary:hover {
-                background-color: #0056b3;
             }
             button.danger {
                 background-color: #d32f2f;
@@ -89,37 +93,37 @@
                 flex-direction: column;
                 font-size: 0.8em;
                 color: #ccc;
-                min-width: 100px;
                 align-items: center;
+                min-width: 45%; /* Para que queden 2 por fila en móvil */
             }
             .control-group input[type="range"] {
-                width: 120px;
+                width: 100%;
                 margin-top: 5px;
             }
             #status {
-                margin-bottom: 10px;
+                margin-bottom: 5px;
                 font-weight: bold;
                 min-height: 20px;
                 text-align: center;
+                font-size: 0.9em;
             }
 
-            /* --- CORRECCIÓN DEL TAMAÑO DE IMAGEN --- */
+            /* --- CONTENEDOR CANVAS --- */
             .canvas-container {
                 position: relative;
                 width: fit-content;
                 height: fit-content;
-                margin: 0 auto;
+                margin: 0 auto 50px auto; /* Margen abajo para poder scrollear al final */
                 border: 1px solid #444;
-                box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+                box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
                 background: repeating-conic-gradient(#222 0% 25%, #333 0% 50%) 50% / 20px 20px;
                 line-height: 0;
+                /* Importante: NO usar touch-action: none aquí para permitir gestión manual */
             }
 
             #canvasOutput {
                 display: block;
-                max-width: 95vw; /* Aprovechar más pantalla en móvil */
-                max-height: 70vh;
-                width: auto;
+                max-width: 100vw;
                 height: auto;
                 z-index: 1;
             }
@@ -131,22 +135,19 @@
                 width: 100%;
                 height: 100%;
                 z-index: 2;
-                cursor: none; /* Ocultar cursor en PC */
-                
-                /* CRÍTICO PARA MÓVIL: Evita que el navegador haga scroll/zoom al tocar el canvas */
-                touch-action: none; 
+                /* Quitamos touch-action: none CSS para gestionar con JS */
             }
 
-            /* Estilo de la Lupa */
+            /* Estilo de la Lupa - AHORA FIXED PARA QUE FLOTE SOBRE TODO */
             #loupe {
-                position: absolute;
-                width: 150px;
-                height: 150px;
+                position: fixed; /* Cambiado de absolute a fixed */
+                width: 140px;
+                height: 140px;
                 border-radius: 50%;
-                border: 3px solid rgba(255, 255, 255, 0.8);
-                box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+                border: 4px solid rgba(255, 255, 255, 0.9);
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.8);
                 overflow: hidden;
-                z-index: 3;
+                z-index: 9999; /* Muy alto para estar encima de todo */
                 display: none;
                 pointer-events: none;
                 background-repeat: no-repeat;
@@ -156,40 +157,31 @@
     </head>
     <body>
         <h2>Smart Inpaint</h2>
-        <p>Funciona con mouse y táctil.</p>
+        <div class="instructions">
+            🖐️ 1 dedo: PINTAR<br>
+            ✌️ 2 dedos: BAJAR / SUBIR
+        </div>
         <div id="status" style="color: #ff9800">Cargando librería...</div>
 
         <div class="toolbar">
-            <label class="btn">📂 Abrir <input type="file" id="fileInput" accept="image/*" /></label>
+            <label class="btn">📂 Foto <input type="file" id="fileInput" accept="image/*" /></label>
 
             <div class="control-group">
                 <span>🖌️ Pincel: <span id="brushVal">40</span>px</span>
-                <input
-                    type="range"
-                    id="brushSize"
-                    min="1"
-                    max="100"
-                    value="40"
-                    oninput="document.getElementById('brushVal').innerText = this.value" />
+                <input type="range" id="brushSize" min="10" max="100" value="40" oninput="document.getElementById('brushVal').innerText = this.value" />
             </div>
             
             <div class="control-group">
-                <span>🧠 Algoritmo:</span>
-                <select id="inpaintAlgo">
-                    <option value="TELEA">Telea (Rápido)</option>
-                    <option value="NS" selected>Navier-Stokes (Bordes)</option>
-                </select>
+                <span>⭕ Radio: <span id="radiusVal">50</span>px</span>
+                <input type="range" id="inpaintRadius" min="10" max="100" value="50" oninput="document.getElementById('radiusVal').innerText = this.value" />
             </div>
 
             <div class="control-group">
-                <span>⭕ Radio: <span id="radiusVal">50</span>px</span>
-                <input
-                    type="range"
-                    id="inpaintRadius"
-                    min="1"
-                    max="100"
-                    value="50"
-                    oninput="document.getElementById('radiusVal').innerText = this.value" />
+                <span>🧠 Modo:</span>
+                <select id="inpaintAlgo">
+                    <option value="TELEA">Rápido (Telea)</option>
+                    <option value="NS" selected>Detalle (NS)</option>
+                </select>
             </div>
 
             <div class="control-group">
@@ -209,34 +201,30 @@
         <div class="canvas-container" id="canvasContainer">
             <canvas id="canvasOutput"></canvas>
             <canvas id="canvasUI"></canvas>
-            <div id="loupe"></div>
         </div>
+        <div id="loupe"></div>
 
         <script>
-            // --- Referencias al DOM ---
+            // --- Referencias ---
             const inputElement = document.getElementById("fileInput");
             const brushSizeRange = document.getElementById("brushSize");
             const loupeZoomSelect = document.getElementById("loupeZoom");
             const status = document.getElementById("status");
             const processBtn = document.getElementById("processBtn");
-            const canvasContainer = document.getElementById("canvasContainer");
             const inpaintAlgoSelect = document.getElementById("inpaintAlgo");
             const inpaintRadiusRange = document.getElementById("inpaintRadius");
-
-            // Canvas
+            
             const canvasOut = document.getElementById("canvasOutput");
             const ctxOut = canvasOut.getContext("2d");
             const canvasUI = document.getElementById("canvasUI");
             const ctxUI = canvasUI.getContext("2d");
             const loupeDiv = document.getElementById("loupe");
 
-            // --- Variables ---
             let imgElement = new Image();
             let src = null, mask = null;
             let isDrawing = false, cvLoaded = false;
             let currentImageURL = null;
 
-            // --- Inicialización ---
             function onOpenCvReady() {
                 cvLoaded = true;
                 status.innerHTML = "✅ Listo. Carga una imagen.";
@@ -266,12 +254,12 @@
 
                 mask = new cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC1);
 
-                status.innerHTML = "🖌️ Dibuja sobre la imperfección.";
+                status.innerHTML = "🖌️ Dibuja sobre el objeto a borrar.";
                 processBtn.disabled = false;
                 ctxUI.clearRect(0, 0, canvasUI.width, canvasUI.height);
             };
 
-            // --- Lógica Unificada: Ratón y Táctil ---
+            // --- SISTEMA DE GESTOS UNIFICADO ---
 
             function getPointerPos(e) {
                 const rect = canvasUI.getBoundingClientRect();
@@ -279,8 +267,6 @@
                 const scaleY = canvasUI.height / rect.height;
 
                 let clientX, clientY;
-
-                // Detectar si es evento táctil o de mouse
                 if (e.touches && e.touches.length > 0) {
                     clientX = e.touches[0].clientX;
                     clientY = e.touches[0].clientY;
@@ -290,28 +276,41 @@
                 }
 
                 return {
-                    x: (clientX - rect.left) * scaleX, // Coordenadas Canvas
+                    x: (clientX - rect.left) * scaleX, // Coordenadas dentro del Canvas (para pintar)
                     y: (clientY - rect.top) * scaleY,
-                    clientX: clientX,                  // Coordenadas Pantalla (para Lupa)
-                    clientY: clientY,
-                    rect: rect
+                    clientX: clientX, // Coordenadas Pantalla (para Lupa Fixed)
+                    clientY: clientY
                 };
             }
 
             function handleStart(e) {
-                e.preventDefault(); // Evita scroll o zoom doble toque
+                // DETECCIÓN DE 2 DEDOS: Si hay más de 1 dedo, no hacemos nada (el navegador hace scroll)
+                if (e.touches && e.touches.length > 1) {
+                    isDrawing = false;
+                    loupeDiv.style.display = "none";
+                    return; // Permitir comportamiento por defecto (scroll/zoom)
+                }
+
+                // 1 DEDO: Bloqueamos scroll y pintamos
+                if (e.cancelable) e.preventDefault(); 
                 isDrawing = true;
-                handleMove(e); // Dibuja el punto inicial inmediatamente
+                handleMove(e);
             }
 
             function handleEnd(e) {
-                e.preventDefault();
+                // Si levantamos el dedo, dejamos de pintar
+                if (e.cancelable) e.preventDefault();
                 isDrawing = false;
-                ctxUI.beginPath(); // Cortar el trazo
+                ctxUI.beginPath();
+                // Ocultar lupa al soltar
+                loupeDiv.style.display = "none";
             }
 
             function handleMove(e) {
-                e.preventDefault(); // CRÍTICO: Evita que la pantalla se mueva al arrastrar
+                // Si hay 2 dedos, salir inmediatamente para dejar scroll
+                if (e.touches && e.touches.length > 1) return;
+
+                if (e.cancelable) e.preventDefault(); // Bloquear scroll nativo
                 if (!src) return;
 
                 const pos = getPointerPos(e);
@@ -324,45 +323,61 @@
                 ctxUI.lineJoin = "round";
 
                 if (isDrawing) {
-                    // Dibujando: Trazo rojo
+                    // PINTAR (Rojo)
                     ctxUI.strokeStyle = "rgba(255, 0, 0, 0.6)";
                     ctxUI.lineTo(pos.x, pos.y);
                     ctxUI.stroke();
                     ctxUI.beginPath();
                     ctxUI.moveTo(pos.x, pos.y);
 
-                    // Máscara OpenCV
+                    // MÁSCARA
                     let color = new cv.Scalar(255);
                     let point = new cv.Point(pos.x, pos.y);
                     cv.circle(mask, point, radius, color, -1);
-                } else {
-                    // Cursor flotante (solo PC, en móvil no se ve si no tocas)
-                    ctxUI.beginPath();
-                    ctxUI.arc(pos.x, pos.y, radius, 0, 2 * Math.PI);
-                    ctxUI.strokeStyle = "white";
-                    ctxUI.lineWidth = 2;
-                    ctxUI.stroke();
-                    ctxUI.strokeStyle = "black";
-                    ctxUI.lineWidth = 1;
-                    ctxUI.stroke();
-                    ctxUI.closePath();
                 }
 
-                updateLoupe(pos.clientX, pos.clientY, pos.x, pos.y, pos.rect);
+                // ACTUALIZAR LUPA
+                updateLoupe(pos.clientX, pos.clientY, pos.x, pos.y);
             }
 
-            function updateLoupe(clientX, clientY, canvasX, canvasY, rect) {
+            function updateLoupe(clientX, clientY, canvasX, canvasY) {
                 loupeDiv.style.display = "block";
                 
-                // Offset para que el dedo no tape la lupa en el móvil
-                const offset = 25; 
-                
-                // Posicionar lupa
-                loupeDiv.style.left = clientX - rect.left + offset + "px";
-                loupeDiv.style.top = clientY - rect.top - offset - loupeDiv.offsetHeight + "px";
+                const loupeSize = 140; // Tamaño definido en CSS
+                const offset = 25; // Separación del dedo
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
 
+                // --- LOGICA DE POSICION INTELIGENTE (Smart Flip) ---
+                
+                // 1. Intentar ponerla arriba a la izquierda del dedo
+                let finalLeft = clientX - loupeSize - offset;
+                let finalTop = clientY - loupeSize - offset;
+
+                // 2. Si se sale por la IZQUIERDA, ponerla a la DERECHA del dedo
+                if (finalLeft < 0) {
+                    finalLeft = clientX + offset;
+                }
+
+                // 3. Si se sale por ARRIBA, ponerla ABAJO del dedo
+                if (finalTop < 0) {
+                    finalTop = clientY + offset;
+                }
+
+                // 4. Chequeo extra: Si a la derecha también se sale, forzar al centro horizontal
+                if (finalLeft + loupeSize > viewportWidth) {
+                    finalLeft = viewportWidth - loupeSize - 10;
+                }
+
+                // Aplicar posición Fixed
+                loupeDiv.style.left = finalLeft + "px";
+                loupeDiv.style.top = finalTop + "px";
+
+                // --- FONDO DE LA LUPA (ZOOM) ---
                 const zoom = parseInt(loupeZoomSelect.value);
                 const loupeRect = loupeDiv.getBoundingClientRect();
+                
+                // El fondo sigue siendo relativo a la imagen real
                 const bgPosX = -(canvasX * zoom) + loupeRect.width / 2;
                 const bgPosY = -(canvasY * zoom) + loupeRect.height / 2;
 
@@ -370,9 +385,7 @@
                 loupeDiv.style.backgroundPosition = `${bgPosX}px ${bgPosY}px`;
             }
 
-            // --- Listeners de Eventos (Mouse y Touch) ---
-            
-            // Mouse
+            // Listeners Mouse
             canvasUI.addEventListener("mousedown", handleStart);
             canvasUI.addEventListener("mousemove", handleMove);
             canvasUI.addEventListener("mouseup", handleEnd);
@@ -383,17 +396,17 @@
                 ctxUI.beginPath();
             });
 
-            // Touch (Móvil)
+            // Listeners Touch (Passive: false es crucial para prevenir scroll)
             canvasUI.addEventListener("touchstart", handleStart, { passive: false });
             canvasUI.addEventListener("touchmove", handleMove, { passive: false });
             canvasUI.addEventListener("touchend", handleEnd, { passive: false });
             canvasUI.addEventListener("touchcancel", handleEnd);
 
-            // --- Procesamiento ---
             function processInpaint() {
                 if (!src) return;
-                status.innerHTML = "⏳ Procesando (Radio alto)...";
+                status.innerHTML = "⏳ Procesando...";
                 status.style.color = "#ffeb3b";
+                loupeDiv.style.display = "none"; // Ocultar lupa durante proceso
                 ctxUI.clearRect(0, 0, canvasUI.width, canvasUI.height);
 
                 setTimeout(() => {
@@ -417,7 +430,6 @@
                     } catch (err) {
                         console.error(err);
                         status.innerHTML = "❌ Error: " + err;
-                        status.style.color = "#d32f2f";
                     }
                 }, 50);
             }
@@ -430,7 +442,7 @@
 
             function downloadImage() {
                 const link = document.createElement("a");
-                link.download = "imagen_editada.png";
+                link.download = "SmartInpaint_Edit.png";
                 link.href = canvasOut.toDataURL();
                 link.click();
             }
