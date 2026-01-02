@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Smart Inpaint - Modo Precisión</title>
+
+        <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png">
+        <link rel="icon" type="image/png" sizes="32x32" href="favicon/favicon-32x32.png">
+        <link rel="icon" type="image/png" sizes="16x16" href="favicon/favicon-16x16.png">
+        <link rel="manifest" href="favicon/site.webmanifest">
+        <link rel="icon" href="favicon/favicon.ico">
+        <script
+            async
+            src="https://docs.opencv.org/4.8.0/opencv.js"
+            onload="onOpenCvReady();"
+            type="text/javascript"></script>
+        <style>
+            /* Estilos generales */
+            body {
+                font-family: "Segoe UI", sans-serif;
+                background-color: #121212;
+                color: #e0e0e0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                padding: 20px;
+                margin: 0;
+            }
+            h2 {
+                margin-bottom: 5px;
+                color: #fff;
+            }
+            p {
+                color: #aaa;
+                margin-bottom: 20px;
+                font-size: 0.9em;
+            }
+
+            /* Barra de herramientas */
+            .toolbar {
+                background-color: #1e1e1e;
+                padding: 10px 20px;
+                border-radius: 10px;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 15px;
+                margin-bottom: 20px;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+                border: 1px solid #333;
+                max-width: 95vw;
+                z-index: 10;
+            }
+            button,
+            label.btn,
+            select {
+                background-color: #333;
+                color: white;
+                border: 1px solid #555;
+                padding: 8px 12px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 14px;
+                transition: 0.2s;
+            }
+            button.primary {
+                background-color: #007bff;
+                border: none;
+                font-weight: bold;
+            }
+            button.primary:hover {
+                background-color: #0056b3;
+            }
+            button.danger {
+                background-color: #d32f2f;
+                border: none;
+            }
+            input[type="file"] {
+                display: none;
+            }
+            .control-group {
+                display: flex;
+                flex-direction: column;
+                font-size: 0.8em;
+                color: #ccc;
+                min-width: 100px;
+            }
+            .control-group input[type="range"] {
+                width: 120px;
+            }
+            #status {
+                margin-bottom: 10px;
+                font-weight: bold;
+                min-height: 20px;
+            }
+
+            /* --- CORRECCIÓN DEL TAMAÑO DE IMAGEN --- */
+            .canvas-container {
+                position: relative;
+                width: fit-content;
+                height: fit-content;
+                margin: 0 auto;
+                border: 1px solid #444;
+                box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+                background: repeating-conic-gradient(#222 0% 25%, #333 0% 50%) 50% / 20px 20px;
+                line-height: 0;
+            }
+
+            #canvasOutput {
+                display: block;
+                max-width: 90vw;
+                max-height: 75vh;
+                width: auto;
+                height: auto;
+                z-index: 1;
+            }
+
+            #canvasUI {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                z-index: 2;
+                cursor: none;
+            }
+
+            /* Estilo de la Lupa */
+            #loupe {
+                position: absolute;
+                width: 150px;
+                height: 150px;
+                border-radius: 50%;
+                border: 3px solid rgba(255, 255, 255, 0.8);
+                box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+                overflow: hidden;
+                z-index: 3;
+                display: none;
+                pointer-events: none;
+                background-repeat: no-repeat;
+                background-color: #000;
+            }
+        </style>
+    </head>
+    <body>
+        <h2>Smart Inpaint - Modo Precisión</h2>
+        <p>Configuración optimizada para mayor contexto y detalle.</p>
+        <div id="status" style="color: #ff9800">Cargando librería...</div>
+
+        <div class="toolbar">
+            <label class="btn">📂 Imagen <input type="file" id="fileInput" accept="image/*" /></label>
+
+            <div class="control-group">
+                <span>🖌️ Pincel: <span id="brushVal">40</span>px</span>
+                <input
+                    type="range"
+                    id="brushSize"
+                    min="1"
+                    max="100"
+                    value="40"
+                    oninput="document.getElementById('brushVal').innerText = this.value" />
+            </div>
+            
+            <div class="control-group">
+                <span>🧠 Algoritmo:</span>
+                <select id="inpaintAlgo">
+                    <option value="TELEA">Telea (Rápido)</option>
+                    <option value="NS" selected>Navier-Stokes (Bordes)</option>
+                </select>
+            </div>
+
+            <div class="control-group" title="Un radio mayor mira más contexto.">
+                <span>⭕ Radio Análisis: <span id="radiusVal">50</span>px</span>
+                <input
+                    type="range"
+                    id="inpaintRadius"
+                    min="1"
+                    max="100"
+                    value="50"
+                    oninput="document.getElementById('radiusVal').innerText = this.value" />
+            </div>
+
+            <div class="control-group">
+                <span>🔍 Zoom Lupa:</span>
+                <select id="loupeZoom">
+                    <option value="2">2x</option>
+                    <option value="3">3x</option>
+                    <option value="4" selected>4x</option>
+                </select>
+            </div>
+
+            <button id="processBtn" class="primary" disabled onclick="processInpaint()">✨ Procesar</button>
+            <button onclick="downloadImage()">💾 Descargar</button>
+            <button class="danger" onclick="resetCanvas()">🗑️ Reiniciar</button>
+        </div>
+
+        <div class="canvas-container" id="canvasContainer">
+            <canvas id="canvasOutput"></canvas>
+            <canvas id="canvasUI"></canvas>
+            <div id="loupe"></div>
+        </div>
+
+        <script>
+            // --- Referencias al DOM ---
+            const inputElement = document.getElementById("fileInput");
+            const brushSizeRange = document.getElementById("brushSize");
+            const loupeZoomSelect = document.getElementById("loupeZoom");
+            const status = document.getElementById("status");
+            const processBtn = document.getElementById("processBtn");
+            const canvasContainer = document.getElementById("canvasContainer");
+            const inpaintAlgoSelect = document.getElementById("inpaintAlgo");
+            const inpaintRadiusRange = document.getElementById("inpaintRadius");
+
+            // Canvas Inferior (Imagen real)
+            const canvasOut = document.getElementById("canvasOutput");
+            const ctxOut = canvasOut.getContext("2d");
+
+            // Canvas Superior (Interfaz UI)
+            const canvasUI = document.getElementById("canvasUI");
+            const ctxUI = canvasUI.getContext("2d");
+
+            const loupeDiv = document.getElementById("loupe");
+
+            // --- Variables de Estado y OpenCV ---
+            let imgElement = new Image();
+            let src = null, mask = null;
+            let isDrawing = false, cvLoaded = false;
+            let currentImageURL = null;
+
+            // --- Inicialización ---
+            function onOpenCvReady() {
+                cvLoaded = true;
+                status.innerHTML = "✅ Listo. Carga una imagen.";
+                status.style.color = "#4caf50";
+            }
+
+            inputElement.addEventListener("change", (e) => {
+                if (!cvLoaded || e.target.files.length === 0) return;
+                if (currentImageURL) URL.revokeObjectURL(currentImageURL);
+                currentImageURL = URL.createObjectURL(e.target.files[0]);
+                imgElement.src = currentImageURL;
+            });
+
+            imgElement.onload = function () {
+                canvasOut.width = canvasUI.width = imgElement.width;
+                canvasOut.height = canvasUI.height = imgElement.height;
+                ctxOut.drawImage(imgElement, 0, 0);
+                loupeDiv.style.backgroundImage = `url(${currentImageURL})`;
+
+                if (src) src.delete();
+                if (mask) mask.delete();
+
+                let tempSrc = cv.imread(canvasOut);
+                src = new cv.Mat();
+                cv.cvtColor(tempSrc, src, cv.COLOR_RGBA2RGB);
+                tempSrc.delete();
+
+                mask = new cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC1);
+
+                status.innerHTML = "🖌️ Dibuja sobre la imperfección.";
+                processBtn.disabled = false;
+                ctxUI.clearRect(0, 0, canvasUI.width, canvasUI.height);
+            };
+
+            // --- Eventos Mouse/Touch ---
+            canvasUI.addEventListener("mousemove", handleMouseMove);
+            canvasUI.addEventListener("mousedown", (e) => {
+                isDrawing = true;
+                handleMouseMove(e);
+            });
+            canvasUI.addEventListener("mouseup", stopDraw);
+            canvasUI.addEventListener("mouseleave", (e) => {
+                stopDraw();
+                loupeDiv.style.display = "none";
+                ctxUI.clearRect(0, 0, canvasUI.width, canvasUI.height);
+            });
+            canvasUI.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+
+            function stopDraw() {
+                isDrawing = false;
+                ctxUI.beginPath();
+            }
+
+            function handleMouseMove(e) {
+                if (!src) return;
+
+                const rect = canvasUI.getBoundingClientRect();
+                const scaleX = canvasUI.width / rect.width;
+                const scaleY = canvasUI.height / rect.height;
+                const x = (e.clientX - rect.left) * scaleX;
+                const y = (e.clientY - rect.top) * scaleY;
+                const radius = parseInt(brushSizeRange.value);
+
+                if (!isDrawing) ctxUI.clearRect(0, 0, canvasUI.width, canvasUI.height);
+
+                ctxUI.lineWidth = radius * 2;
+                ctxUI.lineCap = "round";
+                ctxUI.lineJoin = "round";
+
+                if (isDrawing) {
+                    ctxUI.strokeStyle = "rgba(255, 0, 0, 0.6)";
+                    ctxUI.lineTo(x, y);
+                    ctxUI.stroke();
+                    ctxUI.beginPath();
+                    ctxUI.moveTo(x, y);
+
+                    let color = new cv.Scalar(255);
+                    let point = new cv.Point(x, y);
+                    cv.circle(mask, point, radius, color, -1);
+                } else {
+                    ctxUI.beginPath();
+                    ctxUI.arc(x, y, radius, 0, 2 * Math.PI);
+                    ctxUI.strokeStyle = "white";
+                    ctxUI.lineWidth = 2;
+                    ctxUI.stroke();
+                    ctxUI.strokeStyle = "black";
+                    ctxUI.lineWidth = 1;
+                    ctxUI.stroke();
+                    ctxUI.closePath();
+                }
+
+                updateLoupe(e.clientX, e.clientY, x, y, rect);
+            }
+
+            function updateLoupe(clientX, clientY, canvasX, canvasY, rect) {
+                loupeDiv.style.display = "block";
+                const offset = 20;
+                loupeDiv.style.left = clientX - rect.left + offset + "px";
+                loupeDiv.style.top = clientY - rect.top - offset - loupeDiv.offsetHeight + "px";
+
+                const zoom = parseInt(loupeZoomSelect.value);
+                const loupeRect = loupeDiv.getBoundingClientRect();
+                const bgPosX = -(canvasX * zoom) + loupeRect.width / 2;
+                const bgPosY = -(canvasY * zoom) + loupeRect.height / 2;
+
+                loupeDiv.style.backgroundSize = `${canvasOut.width * zoom}px ${canvasOut.height * zoom}px`;
+                loupeDiv.style.backgroundPosition = `${bgPosX}px ${bgPosY}px`;
+            }
+
+            // --- Procesamiento ---
+            function processInpaint() {
+                if (!src) return;
+                status.innerHTML = "⏳ Procesando (Radio alto)...";
+                status.style.color = "#ffeb3b";
+                ctxUI.clearRect(0, 0, canvasUI.width, canvasUI.height);
+
+                setTimeout(() => {
+                    try {
+                        let dst = new cv.Mat();
+                        
+                        // Configuración del usuario
+                        let algorithm = (inpaintAlgoSelect.value === 'NS') ? cv.INPAINT_NS : cv.INPAINT_TELEA;
+                        const inpaintRadius = parseInt(inpaintRadiusRange.value) || 50;
+
+                        // Ejecutar
+                        cv.inpaint(src, mask, dst, inpaintRadius, algorithm);
+                        
+                        // Mostrar y limpiar
+                        cv.imshow("canvasOutput", dst);
+                        src.delete();
+                        src = dst.clone();
+                        mask.delete();
+                        mask = new cv.Mat.zeros(src.rows, src.cols, cv.CV_8UC1);
+                        dst.delete();
+
+                        status.innerHTML = "✅ Terminado.";
+                        status.style.color = "#4caf50";
+                        loupeDiv.style.backgroundImage = `url(${canvasOut.toDataURL()})`;
+                    } catch (err) {
+                        console.error(err);
+                        status.innerHTML = "❌ Error: " + err;
+                        status.style.color = "#d32f2f";
+                    }
+                }, 50);
+            }
+
+            function resetCanvas() {
+                if (!currentImageURL) return;
+                imgElement.src = currentImageURL;
+                status.innerHTML = "Reiniciado.";
+            }
+
+            function downloadImage() {
+                const link = document.createElement("a");
+                link.download = "imagen_editada.png";
+                link.href = canvasOut.toDataURL();
+                link.click();
+            }
+        </script>
+    </body>
+</html>
