@@ -24,9 +24,8 @@
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                padding: 10px; /* Menos padding en móvil */
+                padding: 10px;
                 margin: 0;
-                /* Permitir scroll en el body, lo controlamos en el canvas */
                 overscroll-behavior-y: contain; 
             }
             h2 {
@@ -36,7 +35,7 @@
                 font-size: 1.5rem;
             }
             .instructions {
-                color: #4caf50; /* Verde para que destaque */
+                color: #4caf50;
                 margin-bottom: 15px;
                 font-size: 1rem;
                 text-align: center;
@@ -73,7 +72,7 @@
                 border-radius: 6px;
                 cursor: pointer;
                 font-size: 14px;
-                flex-grow: 1; /* Botones ocupan espacio en móvil */
+                flex-grow: 1;
                 text-align: center;
             }
             button.primary {
@@ -94,7 +93,7 @@
                 font-size: 0.8em;
                 color: #ccc;
                 align-items: center;
-                min-width: 45%; /* Para que queden 2 por fila en móvil */
+                min-width: 45%;
             }
             .control-group input[type="range"] {
                 width: 100%;
@@ -113,12 +112,11 @@
                 position: relative;
                 width: fit-content;
                 height: fit-content;
-                margin: 0 auto 50px auto; /* Margen abajo para poder scrollear al final */
+                margin: 0 auto 50px auto;
                 border: 1px solid #444;
                 box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
                 background: repeating-conic-gradient(#222 0% 25%, #333 0% 50%) 50% / 20px 20px;
                 line-height: 0;
-                /* Importante: NO usar touch-action: none aquí para permitir gestión manual */
             }
 
             #canvasOutput {
@@ -135,23 +133,56 @@
                 width: 100%;
                 height: 100%;
                 z-index: 2;
-                /* Quitamos touch-action: none CSS para gestionar con JS */
             }
 
-            /* Estilo de la Lupa - AHORA FIXED PARA QUE FLOTE SOBRE TODO */
+            /* Estilo de la Lupa FIXED */
             #loupe {
-                position: fixed; /* Cambiado de absolute a fixed */
+                position: fixed;
                 width: 140px;
                 height: 140px;
                 border-radius: 50%;
                 border: 4px solid rgba(255, 255, 255, 0.9);
                 box-shadow: 0 4px 15px rgba(0, 0, 0, 0.8);
                 overflow: hidden;
-                z-index: 9999; /* Muy alto para estar encima de todo */
+                z-index: 9999;
                 display: none;
                 pointer-events: none;
                 background-repeat: no-repeat;
                 background-color: #000;
+            }
+
+            /* --- NUEVO: OVERLAY DE PROCESAMIENTO --- */
+            #processingOverlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.85); /* Fondo oscuro semitransparente */
+                z-index: 10000; /* Por encima de todo, incluida la lupa */
+                display: none; /* Oculto por defecto */
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                color: white;
+                font-size: 1.5rem;
+                backdrop-filter: blur(5px); /* Efecto borroso moderno */
+            }
+
+            /* Animación del spinner */
+            .spinner {
+                border: 8px solid rgba(255, 255, 255, 0.3);
+                border-top: 8px solid #007bff; /* Color azul */
+                border-radius: 50%;
+                width: 70px;
+                height: 70px;
+                animation: spin 1.5s linear infinite;
+                margin-bottom: 25px;
+            }
+
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
             }
         </style>
     </head>
@@ -202,7 +233,14 @@
             <canvas id="canvasOutput"></canvas>
             <canvas id="canvasUI"></canvas>
         </div>
+        
         <div id="loupe"></div>
+
+        <div id="processingOverlay">
+            <div class="spinner"></div>
+            <p>Procesando imagen...</p>
+            <p style="font-size: 0.9rem; color: #aaa;">Por favor espera.</p>
+        </div>
 
         <script>
             // --- Referencias ---
@@ -213,6 +251,7 @@
             const processBtn = document.getElementById("processBtn");
             const inpaintAlgoSelect = document.getElementById("inpaintAlgo");
             const inpaintRadiusRange = document.getElementById("inpaintRadius");
+            const processingOverlay = document.getElementById("processingOverlay"); // Referencia al nuevo overlay
             
             const canvasOut = document.getElementById("canvasOutput");
             const ctxOut = canvasOut.getContext("2d");
@@ -276,41 +315,34 @@
                 }
 
                 return {
-                    x: (clientX - rect.left) * scaleX, // Coordenadas dentro del Canvas (para pintar)
+                    x: (clientX - rect.left) * scaleX,
                     y: (clientY - rect.top) * scaleY,
-                    clientX: clientX, // Coordenadas Pantalla (para Lupa Fixed)
+                    clientX: clientX,
                     clientY: clientY
                 };
             }
 
             function handleStart(e) {
-                // DETECCIÓN DE 2 DEDOS: Si hay más de 1 dedo, no hacemos nada (el navegador hace scroll)
                 if (e.touches && e.touches.length > 1) {
                     isDrawing = false;
                     loupeDiv.style.display = "none";
-                    return; // Permitir comportamiento por defecto (scroll/zoom)
+                    return;
                 }
-
-                // 1 DEDO: Bloqueamos scroll y pintamos
                 if (e.cancelable) e.preventDefault(); 
                 isDrawing = true;
                 handleMove(e);
             }
 
             function handleEnd(e) {
-                // Si levantamos el dedo, dejamos de pintar
                 if (e.cancelable) e.preventDefault();
                 isDrawing = false;
                 ctxUI.beginPath();
-                // Ocultar lupa al soltar
                 loupeDiv.style.display = "none";
             }
 
             function handleMove(e) {
-                // Si hay 2 dedos, salir inmediatamente para dejar scroll
                 if (e.touches && e.touches.length > 1) return;
-
-                if (e.cancelable) e.preventDefault(); // Bloquear scroll nativo
+                if (e.cancelable) e.preventDefault();
                 if (!src) return;
 
                 const pos = getPointerPos(e);
@@ -323,61 +355,38 @@
                 ctxUI.lineJoin = "round";
 
                 if (isDrawing) {
-                    // PINTAR (Rojo)
                     ctxUI.strokeStyle = "rgba(255, 0, 0, 0.6)";
                     ctxUI.lineTo(pos.x, pos.y);
                     ctxUI.stroke();
                     ctxUI.beginPath();
                     ctxUI.moveTo(pos.x, pos.y);
 
-                    // MÁSCARA
                     let color = new cv.Scalar(255);
                     let point = new cv.Point(pos.x, pos.y);
                     cv.circle(mask, point, radius, color, -1);
                 }
-
-                // ACTUALIZAR LUPA
                 updateLoupe(pos.clientX, pos.clientY, pos.x, pos.y);
             }
 
             function updateLoupe(clientX, clientY, canvasX, canvasY) {
                 loupeDiv.style.display = "block";
-                
-                const loupeSize = 140; // Tamaño definido en CSS
-                const offset = 25; // Separación del dedo
+                const loupeSize = 140;
+                const offset = 25;
                 const viewportWidth = window.innerWidth;
-                const viewportHeight = window.innerHeight;
+                // const viewportHeight = window.innerHeight; // No se usa actualmente
 
-                // --- LOGICA DE POSICION INTELIGENTE (Smart Flip) ---
-                
-                // 1. Intentar ponerla arriba a la izquierda del dedo
                 let finalLeft = clientX - loupeSize - offset;
                 let finalTop = clientY - loupeSize - offset;
 
-                // 2. Si se sale por la IZQUIERDA, ponerla a la DERECHA del dedo
-                if (finalLeft < 0) {
-                    finalLeft = clientX + offset;
-                }
+                if (finalLeft < 0) finalLeft = clientX + offset;
+                if (finalTop < 0) finalTop = clientY + offset;
+                if (finalLeft + loupeSize > viewportWidth) finalLeft = viewportWidth - loupeSize - 10;
 
-                // 3. Si se sale por ARRIBA, ponerla ABAJO del dedo
-                if (finalTop < 0) {
-                    finalTop = clientY + offset;
-                }
-
-                // 4. Chequeo extra: Si a la derecha también se sale, forzar al centro horizontal
-                if (finalLeft + loupeSize > viewportWidth) {
-                    finalLeft = viewportWidth - loupeSize - 10;
-                }
-
-                // Aplicar posición Fixed
                 loupeDiv.style.left = finalLeft + "px";
                 loupeDiv.style.top = finalTop + "px";
 
-                // --- FONDO DE LA LUPA (ZOOM) ---
                 const zoom = parseInt(loupeZoomSelect.value);
                 const loupeRect = loupeDiv.getBoundingClientRect();
-                
-                // El fondo sigue siendo relativo a la imagen real
                 const bgPosX = -(canvasX * zoom) + loupeRect.width / 2;
                 const bgPosY = -(canvasY * zoom) + loupeRect.height / 2;
 
@@ -385,7 +394,7 @@
                 loupeDiv.style.backgroundPosition = `${bgPosX}px ${bgPosY}px`;
             }
 
-            // Listeners Mouse
+            // Listeners
             canvasUI.addEventListener("mousedown", handleStart);
             canvasUI.addEventListener("mousemove", handleMove);
             canvasUI.addEventListener("mouseup", handleEnd);
@@ -395,26 +404,33 @@
                 ctxUI.clearRect(0, 0, canvasUI.width, canvasUI.height);
                 ctxUI.beginPath();
             });
-
-            // Listeners Touch (Passive: false es crucial para prevenir scroll)
             canvasUI.addEventListener("touchstart", handleStart, { passive: false });
             canvasUI.addEventListener("touchmove", handleMove, { passive: false });
             canvasUI.addEventListener("touchend", handleEnd, { passive: false });
             canvasUI.addEventListener("touchcancel", handleEnd);
 
+            // --- FUNCIÓN DE PROCESAMIENTO MODIFICADA ---
             function processInpaint() {
                 if (!src) return;
+                
+                // 1. MOSTRAR EL OVERLAY GRANDE
+                processingOverlay.style.display = "flex";
+                
+                // Opcional: Actualizar el status pequeño también
                 status.innerHTML = "⏳ Procesando...";
                 status.style.color = "#ffeb3b";
-                loupeDiv.style.display = "none"; // Ocultar lupa durante proceso
+
+                loupeDiv.style.display = "none";
                 ctxUI.clearRect(0, 0, canvasUI.width, canvasUI.height);
 
+                // Usamos un setTimeout pequeño para dar tiempo al navegador a renderizar el overlay antes de bloquearse con el cálculo
                 setTimeout(() => {
                     try {
                         let dst = new cv.Mat();
                         let algorithm = (inpaintAlgoSelect.value === 'NS') ? cv.INPAINT_NS : cv.INPAINT_TELEA;
                         const inpaintRadius = parseInt(inpaintRadiusRange.value) || 50;
 
+                        // Esta es la línea que bloquea el navegador
                         cv.inpaint(src, mask, dst, inpaintRadius, algorithm);
                         
                         cv.imshow("canvasOutput", dst);
@@ -430,8 +446,12 @@
                     } catch (err) {
                         console.error(err);
                         status.innerHTML = "❌ Error: " + err;
+                        status.style.color = "#d32f2f";
+                    } finally {
+                        // 2. OCULTAR EL OVERLAY SIEMPRE AL FINAL (Éxito o Error)
+                        processingOverlay.style.display = "none";
                     }
-                }, 50);
+                }, 100); // Aumenté un poco el tiempo para asegurar que se vea el loader
             }
 
             function resetCanvas() {
