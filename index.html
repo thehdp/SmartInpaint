@@ -2,8 +2,8 @@
 <html lang="es">
     <head>
         <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Smart Inpaint - Modo Precisión</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <title>Smart Inpaint - Táctil y Escritorio</title>
 
         <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png">
         <link rel="icon" type="image/png" sizes="32x32" href="favicon/favicon-32x32.png">
@@ -26,15 +26,19 @@
                 align-items: center;
                 padding: 20px;
                 margin: 0;
+                /* Evitar rebote en iOS */
+                overscroll-behavior: none;
             }
             h2 {
                 margin-bottom: 5px;
                 color: #fff;
+                text-align: center;
             }
             p {
                 color: #aaa;
                 margin-bottom: 20px;
                 font-size: 0.9em;
+                text-align: center;
             }
 
             /* Barra de herramientas */
@@ -59,7 +63,7 @@
                 background-color: #333;
                 color: white;
                 border: 1px solid #555;
-                padding: 8px 12px;
+                padding: 10px 14px; /* Botones un poco más grandes para dedos */
                 border-radius: 6px;
                 cursor: pointer;
                 font-size: 14px;
@@ -86,14 +90,17 @@
                 font-size: 0.8em;
                 color: #ccc;
                 min-width: 100px;
+                align-items: center;
             }
             .control-group input[type="range"] {
                 width: 120px;
+                margin-top: 5px;
             }
             #status {
                 margin-bottom: 10px;
                 font-weight: bold;
                 min-height: 20px;
+                text-align: center;
             }
 
             /* --- CORRECCIÓN DEL TAMAÑO DE IMAGEN --- */
@@ -110,8 +117,8 @@
 
             #canvasOutput {
                 display: block;
-                max-width: 90vw;
-                max-height: 75vh;
+                max-width: 95vw; /* Aprovechar más pantalla en móvil */
+                max-height: 70vh;
                 width: auto;
                 height: auto;
                 z-index: 1;
@@ -124,7 +131,10 @@
                 width: 100%;
                 height: 100%;
                 z-index: 2;
-                cursor: none;
+                cursor: none; /* Ocultar cursor en PC */
+                
+                /* CRÍTICO PARA MÓVIL: Evita que el navegador haga scroll/zoom al tocar el canvas */
+                touch-action: none; 
             }
 
             /* Estilo de la Lupa */
@@ -145,12 +155,12 @@
         </style>
     </head>
     <body>
-        <h2>Smart Inpaint - Modo Precisión</h2>
-        <p>Configuración optimizada para mayor contexto y detalle.</p>
+        <h2>Smart Inpaint</h2>
+        <p>Funciona con mouse y táctil.</p>
         <div id="status" style="color: #ff9800">Cargando librería...</div>
 
         <div class="toolbar">
-            <label class="btn">📂 Imagen <input type="file" id="fileInput" accept="image/*" /></label>
+            <label class="btn">📂 Abrir <input type="file" id="fileInput" accept="image/*" /></label>
 
             <div class="control-group">
                 <span>🖌️ Pincel: <span id="brushVal">40</span>px</span>
@@ -171,8 +181,8 @@
                 </select>
             </div>
 
-            <div class="control-group" title="Un radio mayor mira más contexto.">
-                <span>⭕ Radio Análisis: <span id="radiusVal">50</span>px</span>
+            <div class="control-group">
+                <span>⭕ Radio: <span id="radiusVal">50</span>px</span>
                 <input
                     type="range"
                     id="inpaintRadius"
@@ -183,7 +193,7 @@
             </div>
 
             <div class="control-group">
-                <span>🔍 Zoom Lupa:</span>
+                <span>🔍 Lupa:</span>
                 <select id="loupeZoom">
                     <option value="2">2x</option>
                     <option value="3">3x</option>
@@ -192,7 +202,7 @@
             </div>
 
             <button id="processBtn" class="primary" disabled onclick="processInpaint()">✨ Procesar</button>
-            <button onclick="downloadImage()">💾 Descargar</button>
+            <button onclick="downloadImage()">💾 Guardar</button>
             <button class="danger" onclick="resetCanvas()">🗑️ Reiniciar</button>
         </div>
 
@@ -213,17 +223,14 @@
             const inpaintAlgoSelect = document.getElementById("inpaintAlgo");
             const inpaintRadiusRange = document.getElementById("inpaintRadius");
 
-            // Canvas Inferior (Imagen real)
+            // Canvas
             const canvasOut = document.getElementById("canvasOutput");
             const ctxOut = canvasOut.getContext("2d");
-
-            // Canvas Superior (Interfaz UI)
             const canvasUI = document.getElementById("canvasUI");
             const ctxUI = canvasUI.getContext("2d");
-
             const loupeDiv = document.getElementById("loupe");
 
-            // --- Variables de Estado y OpenCV ---
+            // --- Variables ---
             let imgElement = new Image();
             let src = null, mask = null;
             let isDrawing = false, cvLoaded = false;
@@ -264,33 +271,50 @@
                 ctxUI.clearRect(0, 0, canvasUI.width, canvasUI.height);
             };
 
-            // --- Eventos Mouse/Touch ---
-            canvasUI.addEventListener("mousemove", handleMouseMove);
-            canvasUI.addEventListener("mousedown", (e) => {
-                isDrawing = true;
-                handleMouseMove(e);
-            });
-            canvasUI.addEventListener("mouseup", stopDraw);
-            canvasUI.addEventListener("mouseleave", (e) => {
-                stopDraw();
-                loupeDiv.style.display = "none";
-                ctxUI.clearRect(0, 0, canvasUI.width, canvasUI.height);
-            });
-            canvasUI.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+            // --- Lógica Unificada: Ratón y Táctil ---
 
-            function stopDraw() {
-                isDrawing = false;
-                ctxUI.beginPath();
-            }
-
-            function handleMouseMove(e) {
-                if (!src) return;
-
+            function getPointerPos(e) {
                 const rect = canvasUI.getBoundingClientRect();
                 const scaleX = canvasUI.width / rect.width;
                 const scaleY = canvasUI.height / rect.height;
-                const x = (e.clientX - rect.left) * scaleX;
-                const y = (e.clientY - rect.top) * scaleY;
+
+                let clientX, clientY;
+
+                // Detectar si es evento táctil o de mouse
+                if (e.touches && e.touches.length > 0) {
+                    clientX = e.touches[0].clientX;
+                    clientY = e.touches[0].clientY;
+                } else {
+                    clientX = e.clientX;
+                    clientY = e.clientY;
+                }
+
+                return {
+                    x: (clientX - rect.left) * scaleX, // Coordenadas Canvas
+                    y: (clientY - rect.top) * scaleY,
+                    clientX: clientX,                  // Coordenadas Pantalla (para Lupa)
+                    clientY: clientY,
+                    rect: rect
+                };
+            }
+
+            function handleStart(e) {
+                e.preventDefault(); // Evita scroll o zoom doble toque
+                isDrawing = true;
+                handleMove(e); // Dibuja el punto inicial inmediatamente
+            }
+
+            function handleEnd(e) {
+                e.preventDefault();
+                isDrawing = false;
+                ctxUI.beginPath(); // Cortar el trazo
+            }
+
+            function handleMove(e) {
+                e.preventDefault(); // CRÍTICO: Evita que la pantalla se mueva al arrastrar
+                if (!src) return;
+
+                const pos = getPointerPos(e);
                 const radius = parseInt(brushSizeRange.value);
 
                 if (!isDrawing) ctxUI.clearRect(0, 0, canvasUI.width, canvasUI.height);
@@ -300,18 +324,21 @@
                 ctxUI.lineJoin = "round";
 
                 if (isDrawing) {
+                    // Dibujando: Trazo rojo
                     ctxUI.strokeStyle = "rgba(255, 0, 0, 0.6)";
-                    ctxUI.lineTo(x, y);
+                    ctxUI.lineTo(pos.x, pos.y);
                     ctxUI.stroke();
                     ctxUI.beginPath();
-                    ctxUI.moveTo(x, y);
+                    ctxUI.moveTo(pos.x, pos.y);
 
+                    // Máscara OpenCV
                     let color = new cv.Scalar(255);
-                    let point = new cv.Point(x, y);
+                    let point = new cv.Point(pos.x, pos.y);
                     cv.circle(mask, point, radius, color, -1);
                 } else {
+                    // Cursor flotante (solo PC, en móvil no se ve si no tocas)
                     ctxUI.beginPath();
-                    ctxUI.arc(x, y, radius, 0, 2 * Math.PI);
+                    ctxUI.arc(pos.x, pos.y, radius, 0, 2 * Math.PI);
                     ctxUI.strokeStyle = "white";
                     ctxUI.lineWidth = 2;
                     ctxUI.stroke();
@@ -321,12 +348,16 @@
                     ctxUI.closePath();
                 }
 
-                updateLoupe(e.clientX, e.clientY, x, y, rect);
+                updateLoupe(pos.clientX, pos.clientY, pos.x, pos.y, pos.rect);
             }
 
             function updateLoupe(clientX, clientY, canvasX, canvasY, rect) {
                 loupeDiv.style.display = "block";
-                const offset = 20;
+                
+                // Offset para que el dedo no tape la lupa en el móvil
+                const offset = 25; 
+                
+                // Posicionar lupa
                 loupeDiv.style.left = clientX - rect.left + offset + "px";
                 loupeDiv.style.top = clientY - rect.top - offset - loupeDiv.offsetHeight + "px";
 
@@ -339,6 +370,25 @@
                 loupeDiv.style.backgroundPosition = `${bgPosX}px ${bgPosY}px`;
             }
 
+            // --- Listeners de Eventos (Mouse y Touch) ---
+            
+            // Mouse
+            canvasUI.addEventListener("mousedown", handleStart);
+            canvasUI.addEventListener("mousemove", handleMove);
+            canvasUI.addEventListener("mouseup", handleEnd);
+            canvasUI.addEventListener("mouseleave", () => {
+                isDrawing = false;
+                loupeDiv.style.display = "none";
+                ctxUI.clearRect(0, 0, canvasUI.width, canvasUI.height);
+                ctxUI.beginPath();
+            });
+
+            // Touch (Móvil)
+            canvasUI.addEventListener("touchstart", handleStart, { passive: false });
+            canvasUI.addEventListener("touchmove", handleMove, { passive: false });
+            canvasUI.addEventListener("touchend", handleEnd, { passive: false });
+            canvasUI.addEventListener("touchcancel", handleEnd);
+
             // --- Procesamiento ---
             function processInpaint() {
                 if (!src) return;
@@ -349,15 +399,11 @@
                 setTimeout(() => {
                     try {
                         let dst = new cv.Mat();
-                        
-                        // Configuración del usuario
                         let algorithm = (inpaintAlgoSelect.value === 'NS') ? cv.INPAINT_NS : cv.INPAINT_TELEA;
                         const inpaintRadius = parseInt(inpaintRadiusRange.value) || 50;
 
-                        // Ejecutar
                         cv.inpaint(src, mask, dst, inpaintRadius, algorithm);
                         
-                        // Mostrar y limpiar
                         cv.imshow("canvasOutput", dst);
                         src.delete();
                         src = dst.clone();
